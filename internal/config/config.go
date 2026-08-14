@@ -1,9 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 type Config struct {
@@ -55,8 +60,14 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 	cfg := Default()
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return Config{}, fmt.Errorf("parse config: trailing JSON data")
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -80,6 +91,21 @@ func (c Config) Validate() error {
 	for name, tool := range c.Tools {
 		if name == "" || !validDecision(tool.Decision) {
 			return fmt.Errorf("invalid tool policy for %q", name)
+		}
+		for _, root := range tool.Paths {
+			if strings.TrimSpace(root) == "" || !filepath.IsAbs(root) {
+				return fmt.Errorf("tool %q path roots must be absolute", name)
+			}
+		}
+	}
+	for _, key := range c.Redaction.Keys {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("redaction keys must be nonempty")
+		}
+	}
+	for _, pattern := range c.Redaction.Patterns {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("compile redaction pattern: %w", err)
 		}
 	}
 	return nil
