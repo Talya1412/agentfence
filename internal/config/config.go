@@ -34,6 +34,8 @@ type Network struct {
 type Budgets struct {
 	MaxInputBytes  int `json:"max_input_bytes"`
 	MaxResultBytes int `json:"max_result_bytes"`
+	MaxListBytes   int `json:"max_list_bytes"`
+	MaxListPages   int `json:"max_list_pages"`
 	MaxLines       int `json:"max_lines"`
 	MaxFrameBytes  int `json:"max_frame_bytes"`
 	TimeoutSeconds int `json:"timeout_seconds"`
@@ -44,7 +46,7 @@ type Redaction struct {
 }
 
 func Default() Config {
-	return Config{Version: 1, Mode: "enforce", Defaults: Defaults{Decision: "deny"}, Tools: map[string]Tool{}, Budgets: Budgets{MaxInputBytes: 64 * 1024, MaxResultBytes: 256 * 1024, MaxLines: 1000, MaxFrameBytes: 1024 * 1024, TimeoutSeconds: 30}, Redaction: Redaction{Keys: []string{"password", "token", "secret", "api_key", "authorization"}}}
+	return Config{Version: 1, Mode: "enforce", Defaults: Defaults{Decision: "deny"}, Tools: map[string]Tool{}, Budgets: Budgets{MaxInputBytes: 64 * 1024, MaxResultBytes: 256 * 1024, MaxListBytes: 1024 * 1024, MaxListPages: 32, MaxLines: 1000, MaxFrameBytes: 1024 * 1024, TimeoutSeconds: 30}, Redaction: Redaction{Keys: []string{"password", "token", "secret", "api_key", "authorization"}}}
 }
 
 func Load(path string) (Config, error) {
@@ -72,7 +74,7 @@ func (c Config) Validate() error {
 	if !validDecision(c.Defaults.Decision) {
 		return fmt.Errorf("invalid default decision")
 	}
-	if c.Budgets.MaxInputBytes <= 0 || c.Budgets.MaxResultBytes <= 0 || c.Budgets.MaxLines <= 0 || c.Budgets.MaxFrameBytes <= 0 || c.Budgets.TimeoutSeconds <= 0 {
+	if c.Budgets.MaxInputBytes <= 0 || c.Budgets.MaxResultBytes <= 0 || c.Budgets.MaxListBytes <= 0 || c.Budgets.MaxListPages <= 0 || c.Budgets.MaxLines <= 0 || c.Budgets.MaxFrameBytes <= 0 || c.Budgets.TimeoutSeconds <= 0 {
 		return fmt.Errorf("budgets must be positive")
 	}
 	for name, tool := range c.Tools {

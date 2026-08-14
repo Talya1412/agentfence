@@ -16,7 +16,7 @@ Run proxy against any line-oriented MCP server:
 dist\agentfence.exe proxy -config agentfence.json -audit audit.jsonl -server your-mcp-server
 ```
 
-Use `dry-run` to return policy decisions without forwarding calls. `inspect` prints parsed config. `explain -tool NAME` explains current decision. Stdout stays JSONL protocol-clean; diagnostics go stderr. `tools/list` pagination currently fails closed when downstream returns `nextCursor`; proxy never exposes an incomplete inventory.
+Use `dry-run` to return policy decisions without forwarding calls. `inspect` prints parsed config. `explain -tool NAME` explains current decision. Stdout stays JSONL protocol-clean; diagnostics go stderr. `tools/list` follows bounded downstream cursors, aggregates and filters pages, and never exposes an incomplete inventory.
 
 ## Configuration
 
@@ -36,4 +36,4 @@ Module path is `github.com/agentfence/agentfence`, a neutral local module path w
 
 ## Threat model and coverage
 
-See `THREAT_MODEL.md`. AgentFence governs intercepted client messages only. It does not provide HTTP, OS sandboxing, DNS/network enforcement, parser-grade SQL checks, prompt-injection defense, symlink/TOCTOU protection, tamper-proof audit, or a process-tree kill guarantee. MCP references used for constraints: [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools), and [authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
+See `THREAT_MODEL.md`. AgentFence governs intercepted client messages only. It aggregates bounded `tools/list` pages, validates cached object input schemas before calls, and does not provide HTTP, OS sandboxing, DNS/network enforcement, parser-grade SQL checks, prompt-injection defense, symlink/TOCTOU protection, tamper-proof audit, or a process-tree kill guarantee. MCP references used for constraints: [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools), and [authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
