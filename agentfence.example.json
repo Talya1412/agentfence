@@ -3,7 +3,7 @@
   "mode": "enforce",
   "defaults": {"decision": "deny"},
   "tools": {
-    "read_file": {"decision": "allow", "paths": ["/tmp/agentfence/*"]},
+    "read_file": {"decision": "allow", "paths": ["//tmp/agentfence"]},
     "fetch": {"decision": "allow", "schemes": ["https"], "hosts": ["example.com"]},
     "needs_human": {"decision": "require_approval"}
   },
