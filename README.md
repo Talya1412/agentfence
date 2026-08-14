@@ -1,26 +1,65 @@
 # AgentFence
 
-AgentFence is a local, provider-neutral MCP JSONL stdio proxy. It filters `tools/list`, evaluates `tools/call`, emits redacted JSONL audit records, and forwards only allowed calls.
+AgentFence is a local, provider-neutral MCP JSONL stdio proxy. It filters `tools/list`, evaluates `tools/call`, emits redacted JSONL audit records, and forwards allowed calls. It uses only the Go standard library.
 
-## 60-second demo
+AgentFence is an interception-layer policy tool. It is not an OS sandbox, network firewall, parser-backed SQL executor, prompt-injection defense, or process supervisor. Read [THREAT_MODEL.md](THREAT_MODEL.md) before relying on it.
+
+## First run: local allow/deny demo
+
+Requires Go 1.26 or newer. Commands below use repository files only. `cmd/fixture-mcp` is a small line-oriented downstream fixture; it is for local smoke testing, not production use.
+
+PowerShell:
 
 ```powershell
-go build -trimpath -o dist/agentfence ./cmd/agentfence
+New-Item -ItemType Directory -Force dist | Out-Null
+go build -trimpath -o dist/agentfence.exe ./cmd/agentfence
+go build -trimpath -o dist/fixture-mcp.exe ./cmd/fixture-mcp
 Copy-Item agentfence.example.json agentfence.json
 go run ./cmd/agentfence check -config agentfence.json
+go run ./cmd/agentfence inspect -config agentfence.json
+go run ./cmd/agentfence explain -config agentfence.json -tool read_file
+go run ./cmd/agentfence explain -config agentfence.json -tool blocked
 ```
 
-Run proxy against any line-oriented MCP server:
+POSIX shell:
+
+```sh
+mkdir -p dist
+go build -trimpath -o dist/agentfence ./cmd/agentfence
+go build -trimpath -o dist/fixture-mcp ./cmd/fixture-mcp
+cp agentfence.example.json agentfence.json
+go run ./cmd/agentfence check -config agentfence.json
+go run ./cmd/agentfence inspect -config agentfence.json
+go run ./cmd/agentfence explain -config agentfence.json -tool read_file
+go run ./cmd/agentfence explain -config agentfence.json -tool blocked
+```
+
+Run a complete fixture exchange. The fixture exposes `echo` and `blocked`; default deny filters both from `tools/list`, and the `echo` call is denied. The exchange proves filtering, denial, and audit output. Use POSIX shell for byte-oriented stdin, or send UTF-8 bytes from a PowerShell-compatible tool:
+
+PowerShell with UTF-8 input:
 
 ```powershell
-dist\agentfence.exe proxy -config agentfence.json -audit audit.jsonl -server your-mcp-server
+$requests = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}', '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{}}}'
+[IO.File]::WriteAllLines('requests.jsonl', $requests, [Text.UTF8Encoding]::new($false))
+cmd /c ".\dist\agentfence.exe proxy -config agentfence.json -audit audit.jsonl --server .\dist\fixture-mcp.exe < requests.jsonl"
+Get-Content -Encoding utf8 audit.jsonl
+Remove-Item requests.jsonl
 ```
 
-Use `dry-run` to return policy decisions without forwarding calls. `inspect` prints parsed config. `explain -tool NAME` explains current decision. Stdout stays JSONL protocol-clean; diagnostics go stderr. `tools/list` follows bounded downstream cursors, aggregates and filters pages, and never exposes an incomplete inventory.
+POSIX shell:
 
-## Configuration
+```sh
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{}}}' | ./dist/agentfence proxy -config agentfence.json -audit audit.jsonl --server ./dist/fixture-mcp
+cat audit.jsonl
+```
 
-See `agentfence.example.json`. Defaults fail closed. Explicit tool decisions override defaults. JSON-RPC uses strict bounded newline frames, valid IDs, no trailing JSON, and no notification responses. Shell tools require object `argv` and reject operators/substitution. Paths require absolute component-aware roots. URL-like values require valid scheme and host allowlists. Result/error payloads are redacted and bounded.
+For policy-only behavior, replace `proxy` with `dry-run`. `inspect` prints parsed config. `explain -tool NAME` prints the current decision. Stdout remains JSONL protocol output for proxy modes; diagnostics go to stderr.
+
+## Configuration and policy
+
+Start from [agentfence.example.json](agentfence.example.json). Defaults deny. Explicit tool decisions override the default. Paths use absolute lexical roots. URL-like values require configured scheme and host allowlists. Shell policy expects object `argv` and rejects selected operators/substitution tokens. SQL checks are conservative lexical checks. Result/error data and audit values can be redacted and bounded by config.
+
+See [POLICY_COOKBOOK.md](POLICY_COOKBOOK.md) for small policy patterns and [COMPATIBILITY.md](COMPATIBILITY.md) for supported transport and message expectations.
 
 ## Development
 
@@ -29,11 +68,21 @@ gofmt -w cmd internal
 go test ./...
 go test -race ./...
 go vet ./...
+go build -trimpath -o dist/agentfence.exe ./cmd/agentfence
+```
+
+```sh
+gofmt -w cmd internal
+go test ./...
+go test -race ./...
+go vet ./...
 go build -trimpath -o dist/agentfence ./cmd/agentfence
 ```
 
-Module path is `github.com/agentfence/agentfence`, a neutral local module path with no external dependencies.
+Local outputs under `dist/` are ignored. A local release artifact is the platform-native binary produced by the documented `go build` command; no signing, notarization, hosted artifact, or checksum service is provided by this repository. See [RELEASING.md](RELEASING.md).
 
-## Threat model and coverage
+## Scope and references
 
-See `THREAT_MODEL.md`. AgentFence governs intercepted client messages only. It aggregates bounded `tools/list` pages, validates cached object input schemas before calls, and does not provide HTTP, OS sandboxing, DNS/network enforcement, parser-grade SQL checks, prompt-injection defense, symlink/TOCTOU protection, tamper-proof audit, or a process-tree kill guarantee. MCP references used for constraints: [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools), and [authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
+AgentFence governs intercepted newline-delimited JSON-RPC messages only. It bounds frames, results, errors, execution time, and `tools/list` pagination; validates supported portions of cached object input schemas; redacts configured keys and patterns; and writes local audit records. Out-of-band traffic, DNS resolution, socket egress, symlink/TOCTOU races, downstream side effects, descendant processes, and audit tampering remain outside this boundary.
+
+See [THREAT_MODEL.md](THREAT_MODEL.md) and [SECURITY.md](SECURITY.md). MCP references used for protocol constraints: [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools), and [authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). MCP compatibility claims here are limited to observed JSONL stdio behavior and supported message shapes, not a universal MCP certification.

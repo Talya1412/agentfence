@@ -2,7 +2,7 @@
 
 ## Protected boundary
 
-AgentFence sits between an MCP client and one downstream JSONL stdio server. It can deny intercepted `tools/call` requests, filter advertised tools, redact returned JSON, and write local audit records.
+AgentFence sits between an MCP client and one downstream JSONL stdio server. It can deny intercepted `tools/call` requests, filter advertised tools, redact returned JSON, and write local audit records. An explicitly allowed call requires schema availability established by a successful `tools/list`; without that cache entry it is denied with `schema_unavailable` before downstream forwarding.
 
 ## Covered threats
 
@@ -31,10 +31,10 @@ AgentFence sits between an MCP client and one downstream JSONL stdio server. It 
 | --- | --- | --- | --- |
 | JSONL frame exhaustion | Fixed | `ReadLimit` reads bounded chunks and rejects oversized frames before completion; regression test covers unterminated input. | Keep fuzzing frame boundaries. |
 | Fractional JSON-RPC IDs | Fixed | IDs accept strings and integers only; fractional, null, and object IDs reject. | Add schema-generated protocol corpus if dependency policy changes. |
-| Invalid `tools/list` tool shape | Partial, fail-closed | Names, object input schemas, supported primitive property types, required fields, `additionalProperties: false`, and duplicate names are checked. | Extend schema keyword coverage only with bounded, explicitly supported rules. |
+| Invalid `tools/list` tool shape | Partial, fail-closed | Names, object input schemas, supported primitive property types, required fields, `additionalProperties: false`, duplicate names, and supported schema keywords are checked. Unknown schema keywords and object/array property schemas are rejected because recursive JSON Schema enforcement is not implemented. | Extend schema keyword coverage only with bounded, explicitly supported rules. |
 | `tools/list` pagination | Fixed, bounded | Downstream cursors are fetched with internal request IDs, aggregated, filtered, and never exposed; malformed cursors, cycles, page limits, and aggregate byte limits fail closed. | Keep fuzzing cursor/page boundaries. |
 | Human approval | Deferred by scope | `require_approval` denies because stdio CLI has no trusted UI/channel. | Add explicit approval adapter with authenticated caller, timeout, denial default, and audit binding. |
-| Tool input JSON Schema validation | Partial, fail-closed | Cached schemas validate object arguments, required properties, primitive types, and `additionalProperties: false` before policy and forwarding. Unsupported schema keywords are not interpreted. | Expand only through bounded stdlib validators; retain fail-closed behavior. |
+| Tool input JSON Schema validation | Partial, fail-closed | Cached schemas validate object arguments, required properties, primitive types, and `additionalProperties: false` before forwarding. Unsupported keywords and nested object/array property schemas are rejected rather than silently ignored. An explicitly allowed call without a cached schema returns `schema_unavailable` and is not forwarded. | Expand only through bounded stdlib validators; retain fail-closed behavior. |
 | Path symlink/TOCTOU | Platform limit | Lexical absolute component checks only. | Enforce canonical handles or OS sandbox at execution boundary. |
 | Network/DNS enforcement | Platform limit | URL policy checks message values, not socket resolution or egress. | Move execution into network-isolated worker/sandbox. |
 | Shell/SQL semantics | Deferred | Conservative lexical checks; no parser or execution isolation. | Use structured executors and parser-backed SQL policy. |
