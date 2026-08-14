@@ -1,0 +1,5 @@
+agentfence.json
+audit.jsonl
+dist/
+.omo/
+.codegraph/
