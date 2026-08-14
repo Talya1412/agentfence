@@ -17,9 +17,14 @@ func TestRunProxy_forwardsServerArgumentsAndClosesLifecycle(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte(configJSON), 0600); err != nil {
 		t.Fatal(err)
 	}
+	serverPath := t.TempDir() + "/server.sh"
+	serverScript := "#!/bin/sh\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[{\"name\":\"echo\",\"inputSchema\":{\"type\":\"object\"}}]}}'\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"arg\":\"'$1'\"}}'\n"
+	if err := os.WriteFile(serverPath, []byte(serverScript), 0700); err != nil {
+		t.Fatal(err)
+	}
 	request := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}` + "\n" + `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{}}}` + "\n"
 	var stdout, stderr bytes.Buffer
-	err := run([]string{"proxy", "--config", configPath, "--server", "sh", "-c", "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[{\"name\":\"echo\",\"inputSchema\":{\"type\":\"object\"}}]}}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"arg\":\"'$0'\"}}'", "forwarded"}, strings.NewReader(request), &stdout, &stderr)
+	err := run([]string{"proxy", "--config", configPath, "--server", "sh", serverPath, "forwarded"}, strings.NewReader(request), &stdout, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
