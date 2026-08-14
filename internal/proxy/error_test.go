@@ -180,3 +180,21 @@ func TestRun_rejectsMismatchedDownstreamResponse(t *testing.T) {
 		t.Fatalf("forwarded mismatched response: %s", clientOut.String())
 	}
 }
+
+func TestRun_rejectsDownstreamRequestAsResponse(t *testing.T) {
+	cfg := config.Default()
+	redactor, err := audit.NewRedactor(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := `{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"
+	downstream := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"unexpected"}` + "\n")
+	var clientOut bytes.Buffer
+	err = (Proxy{Config: cfg, Redactor: redactor}).Run(strings.NewReader(request), &clientOut, downstream)
+	if err == nil || !strings.Contains(err.Error(), "not a response") {
+		t.Fatalf("err=%v", err)
+	}
+	if clientOut.Len() != 0 {
+		t.Fatalf("forwarded downstream request: %s", clientOut.String())
+	}
+}

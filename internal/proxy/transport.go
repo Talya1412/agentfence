@@ -57,6 +57,9 @@ func (p Proxy) readResponseRaw(id json.RawMessage, out io.Writer, serverIn *bufi
 			}
 			continue
 		}
+		if kind != protocol.ResponseKind {
+			return protocol.Message{}, fmt.Errorf("downstream message is not a response")
+		}
 		if !bytes.Equal(response.ID, id) {
 			return protocol.Message{}, fmt.Errorf("downstream response id does not match request")
 		}
