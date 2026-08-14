@@ -26,6 +26,18 @@ func (p Proxy) forward(msg protocol.Message, kind protocol.Kind, out io.Writer, 
 }
 
 func (p Proxy) readResponse(id json.RawMessage, out io.Writer, serverIn *bufio.Reader) (protocol.Message, error) {
+	response, err := p.readResponseRaw(id, out, serverIn)
+	if err != nil {
+		return protocol.Message{}, err
+	}
+	redacted, err := p.redactMessage(response)
+	if err != nil {
+		return protocol.Message{}, err
+	}
+	return redacted, nil
+}
+
+func (p Proxy) readResponseRaw(id json.RawMessage, out io.Writer, serverIn *bufio.Reader) (protocol.Message, error) {
 	for {
 		response, err := protocol.ReadLimit(serverIn, p.frameLimit())
 		if err != nil {
@@ -48,11 +60,7 @@ func (p Proxy) readResponse(id json.RawMessage, out io.Writer, serverIn *bufio.R
 		if !bytes.Equal(response.ID, id) {
 			return protocol.Message{}, fmt.Errorf("downstream response id does not match request")
 		}
-		redacted, err := p.redactMessage(response)
-		if err != nil {
-			return protocol.Message{}, err
-		}
-		return redacted, nil
+		return response, nil
 	}
 }
 
@@ -111,6 +119,12 @@ func (p Proxy) writeAudit(entry audit.Entry) error {
 	if err != nil {
 		return err
 	}
-	_, err = p.Audit.Write(line)
-	return err
+	written, err := p.Audit.Write(line)
+	if err != nil {
+		return err
+	}
+	if written != len(line) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
