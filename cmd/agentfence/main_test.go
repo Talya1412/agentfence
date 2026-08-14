@@ -1,0 +1,29 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+func TestRunProxy_forwardsServerArgumentsAndClosesLifecycle(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell argument fixture differs on Windows")
+	}
+	configPath := t.TempDir() + "/config.json"
+	configJSON := `{"version":1,"mode":"enforce","defaults":{"decision":"deny"},"tools":{"echo":{"decision":"allow"}},"budgets":{"max_input_bytes":1024,"max_result_bytes":1024,"max_lines":10}}`
+	if err := os.WriteFile(configPath, []byte(configJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+	request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{}}}` + "\n"
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"proxy", "--config", configPath, "--server", "sh", "-c", "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"arg\":\"'$0'\"}}'", "forwarded"}, strings.NewReader(request), &stdout, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), `"arg":"forwarded"`) {
+		t.Fatalf("stdout=%q", stdout.String())
+	}
+}
