@@ -61,6 +61,9 @@ func ReadLimit(r *bufio.Reader, maxBytes int) (Message, error) {
 	if len(line) == 0 {
 		return Message{}, fmt.Errorf("empty JSON-RPC frame")
 	}
+	if err := rejectDuplicateKeys(line); err != nil {
+		return Message{}, fmt.Errorf("invalid JSON-RPC line: %w", err)
+	}
 	var msg Message
 	decoder := json.NewDecoder(bytes.NewReader(line))
 	if err := decoder.Decode(&msg); err != nil {
@@ -83,6 +86,61 @@ func ReadLimit(r *bufio.Reader, maxBytes int) (Message, error) {
 		}
 	}
 	return msg, nil
+}
+
+func rejectDuplicateKeys(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := scanJSONValue(decoder); err != nil {
+		return err
+	}
+	var extra interface{}
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return fmt.Errorf("trailing JSON-RPC data")
+	}
+	return nil
+}
+
+func scanJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	switch delimiter := token.(type) {
+	case json.Delim:
+		switch delimiter {
+		case '{':
+			keys := map[string]struct{}{}
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return err
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return fmt.Errorf("object key must be string")
+				}
+				if _, exists := keys[key]; exists {
+					return fmt.Errorf("duplicate object key %q", key)
+				}
+				keys[key] = struct{}{}
+				if err := scanJSONValue(decoder); err != nil {
+					return err
+				}
+			}
+		case '[':
+			for decoder.More() {
+				if err := scanJSONValue(decoder); err != nil {
+					return err
+				}
+			}
+		default:
+			return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
+		}
+		_, err = decoder.Token()
+		return err
+	default:
+		return nil
+	}
 }
 
 func min(left, right int) int {

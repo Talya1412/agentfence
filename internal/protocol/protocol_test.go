@@ -28,6 +28,18 @@ func TestRead_rejectsAmbiguousAndInvalidIDs(t *testing.T) {
 	}
 }
 
+func TestRead_rejectsDuplicateObjectKeys(t *testing.T) {
+	cases := []string{
+		`{"jsonrpc":"2.0","jsonrpc":"2.0","id":1,"method":"x"}`,
+		`{"jsonrpc":"2.0","id":1,"method":"x","params":{"cursor":"one","cursor":"two"}}`,
+	}
+	for _, input := range cases {
+		if _, err := Read(bufio.NewReader(strings.NewReader(input + "\n"))); err == nil {
+			t.Fatalf("accepted duplicate key frame %s", input)
+		}
+	}
+}
+
 func TestRead_rejectsOversizedFrame(t *testing.T) {
 	if _, err := ReadLimit(bufio.NewReader(strings.NewReader(`{"jsonrpc":"2.0","method":"x"}`+"\n")), 10); err == nil {
 		t.Fatal("expected frame limit")
