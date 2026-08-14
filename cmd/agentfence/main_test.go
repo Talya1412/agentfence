@@ -27,3 +27,23 @@ func TestRunProxy_forwardsServerArgumentsAndClosesLifecycle(t *testing.T) {
 		t.Fatalf("stdout=%q", stdout.String())
 	}
 }
+
+func TestRun_help(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if err := run([]string{"--help"}, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "commands:") || out.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
+func TestRun_version(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if err := run([]string{"version"}, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "agentfence dev") || errOut.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}

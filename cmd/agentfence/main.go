@@ -16,6 +16,12 @@ import (
 	"github.com/agentfence/agentfence/internal/proxy"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+	built   = "unknown"
+)
+
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -24,7 +30,15 @@ func main() {
 }
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("command required: proxy, check, inspect, explain, dry-run")
+		return fmt.Errorf("command required: proxy, check, inspect, explain, dry-run, version; use --help")
+	}
+	if args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+		_, err := fmt.Fprintln(stderr, "AgentFence: policy proxy for MCP JSONL stdio")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(stderr, "commands: proxy, dry-run, check, inspect, explain, version")
+		return err
 	}
 	switch args[0] {
 	case "proxy":
@@ -37,6 +51,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return runInspect(args[1:], stdout)
 	case "explain":
 		return runExplain(args[1:], stdout)
+	case "version":
+		return runVersion(args[1:], stdout)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -172,6 +188,7 @@ func runExplain(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	path := fs.String("config", "agentfence.json", "config path")
 	name := fs.String("tool", "", "tool name")
+	arguments := fs.String("arguments", "{}", "JSON object arguments")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -179,7 +196,26 @@ func runExplain(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	result := policy.Evaluate(cfg, policy.Request{Name: *name, Arguments: json.RawMessage(`{}`)})
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(*arguments), &parsed); err != nil {
+		return fmt.Errorf("invalid --arguments JSON object: %w", err)
+	}
+	if parsed == nil {
+		return fmt.Errorf("invalid --arguments JSON object: expected object")
+	}
+	encoded, err := json.Marshal(parsed)
+	if err != nil {
+		return err
+	}
+	result := policy.Evaluate(cfg, policy.Request{Name: *name, Arguments: encoded})
 	_, err = fmt.Fprintf(out, "%s: %s (%s)\n", result.Decision, result.Explanation, result.ReasonCode)
+	return err
+}
+
+func runVersion(args []string, out io.Writer) error {
+	if len(args) != 0 {
+		return fmt.Errorf("version takes no arguments")
+	}
+	_, err := fmt.Fprintf(out, "agentfence %s commit=%s built=%s\n", version, commit, built)
 	return err
 }
