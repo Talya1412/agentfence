@@ -1,4 +1,4 @@
-name: Local release artifacts
+name: Release
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -28,12 +28,20 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           if [ "$version" = "$GITHUB_REF_NAME" ]; then version=manual; fi
           mkdir -p "dist/release/$version"
-          GOOS=linux GOARCH=amd64 go build -trimpath -o "dist/release/$version/agentfence-linux-amd64" ./cmd/agentfence
-          GOOS=darwin GOARCH=arm64 go build -trimpath -o "dist/release/$version/agentfence-darwin-arm64" ./cmd/agentfence
-          GOOS=windows GOARCH=amd64 go build -trimpath -o "dist/release/$version/agentfence-windows-amd64.exe" ./cmd/agentfence
-           find "dist/release/$version" -maxdepth 1 -type f ! -name SHA256SUMS -print0 | xargs -0 sha256sum > "dist/release/$version/SHA256SUMS"
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: agentfence-release-${{ github.ref_name }}
-          path: dist/release
+          ldflags="-X main.version=$version -X main.commit=$GITHUB_SHA -X main.built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$ldflags" -o "dist/release/$version/agentfence-linux-amd64" ./cmd/agentfence
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$ldflags" -o "dist/release/$version/agentfence-darwin-amd64" ./cmd/agentfence
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$ldflags" -o "dist/release/$version/agentfence-darwin-arm64" ./cmd/agentfence
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$ldflags" -o "dist/release/$version/agentfence-windows-amd64.exe" ./cmd/agentfence
+          find "dist/release/$version" -maxdepth 1 -type f ! -name SHA256SUMS -print0 | xargs -0 sha256sum > "dist/release/$version/SHA256SUMS"
+        - name: Upload workflow artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: agentfence-release-${{ github.ref_name }}
+            path: dist/release
+       - name: Publish GitHub Release
+         if: startsWith(github.ref, 'refs/tags/v')
+         uses: softprops/action-gh-release@v2
+         with:
+           generate_release_notes: true
+           files: dist/release/**
