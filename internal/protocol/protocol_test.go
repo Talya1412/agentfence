@@ -57,6 +57,22 @@ func TestReadLimit_stopsUnterminatedFrameAtLimit(t *testing.T) {
 	}
 }
 
+func TestWrite_rejectsShortWrite(t *testing.T) {
+	msg := Message{JSONRPC: "2.0", ID: []byte(`1`), Result: []byte(`{}`)}
+	if err := Write(shortWriter{}, msg); err != io.ErrShortWrite {
+		t.Fatalf("err=%v, want %v", err, io.ErrShortWrite)
+	}
+}
+
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return len(p) - 1, nil
+}
+
 type countingReader struct {
 	data  string
 	index int

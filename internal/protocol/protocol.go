@@ -202,8 +202,15 @@ func Write(w io.Writer, msg Message) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(w, "%s\n", data)
-	return err
+	data = append(data, '\n')
+	written, err := w.Write(data)
+	if err != nil {
+		return err
+	}
+	if written != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 func Response(id json.RawMessage, result interface{}) (Message, error) {
 	data, err := json.Marshal(result)
