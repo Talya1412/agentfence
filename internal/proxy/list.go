@@ -21,9 +21,13 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 	if err := protocol.Write(downstream, msg); err != nil {
 		return err
 	}
-	response, err := p.readResponse(msg.ID, out, serverIn)
+	response, err := p.readResponseRaw(msg.ID, out, serverIn)
 	if err != nil {
 		return err
+	}
+	listBytes := len(response.Result)
+	if listBytes > p.listByteLimit() {
+		return fmt.Errorf("tools/list aggregate exceeds byte budget")
 	}
 	if len(response.Result) == 0 {
 		return fmt.Errorf("tools/list response missing result")
@@ -38,7 +42,6 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 	}
 	allTools := tools
 	seenCursors := map[string]bool{}
-	listBytes := len(response.Result)
 	for page := 1; ; page++ {
 		cursor, hasCursor, cursorErr := nextCursor(payload)
 		if cursorErr != nil {
@@ -61,7 +64,7 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 		if err := protocol.Write(downstream, pageRequest); err != nil {
 			return err
 		}
-		pageResponse, readErr := p.readResponse(pageRequest.ID, out, serverIn)
+		pageResponse, readErr := p.readResponseRaw(pageRequest.ID, out, serverIn)
 		if readErr != nil {
 			return readErr
 		}
@@ -120,7 +123,11 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 	if err != nil {
 		return err
 	}
-	return p.writeBounded(out, response)
+	redacted, err := p.redactMessage(response)
+	if err != nil {
+		return err
+	}
+	return p.writeBounded(out, redacted)
 }
 
 func toolMetadata(tool map[string]json.RawMessage) (string, error) {

@@ -7,9 +7,21 @@ import (
 	"strings"
 )
 
+var supportedSchemaKeywords = map[string]bool{
+	"type":                 true,
+	"properties":           true,
+	"required":             true,
+	"additionalProperties": true,
+}
+
 func validateSchema(schema map[string]json.RawMessage) error {
 	if schema == nil {
 		return fmt.Errorf("schema must be object")
+	}
+	for keyword := range schema {
+		if !supportedSchemaKeywords[keyword] {
+			return fmt.Errorf("unsupported keyword %q", keyword)
+		}
 	}
 	raw, ok := schema["type"]
 	if !ok {
@@ -59,6 +71,14 @@ func validateSchema(schema map[string]json.RawMessage) error {
 }
 
 func validatePropertySchema(schema map[string]json.RawMessage) error {
+	if schema == nil {
+		return fmt.Errorf("schema must be object")
+	}
+	for keyword := range schema {
+		if !supportedSchemaKeywords[keyword] {
+			return fmt.Errorf("unsupported keyword %q", keyword)
+		}
+	}
 	raw, ok := schema["type"]
 	if !ok {
 		return fmt.Errorf("type is required")
@@ -68,12 +88,11 @@ func validatePropertySchema(schema map[string]json.RawMessage) error {
 		return fmt.Errorf("type must be string")
 	}
 	switch schemaType {
-	case "string", "number", "integer", "boolean", "null", "object", "array":
+	case "string", "number", "integer", "boolean", "null":
+	case "object", "array":
+		return fmt.Errorf("nested %s property schemas are unsupported", schemaType)
 	default:
 		return fmt.Errorf("unsupported type %q", schemaType)
-	}
-	if schemaType == "object" {
-		return validateSchema(schema)
 	}
 	return nil
 }

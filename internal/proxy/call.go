@@ -24,22 +24,33 @@ func (p Proxy) call(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 		}
 		return p.writeBounded(out, response)
 	}
-	if schema, ok := schemas[params.Name]; ok {
-		var schemaObject map[string]json.RawMessage
-		if json.Unmarshal(schema, &schemaObject) != nil || !argumentsMatchSchema(params.Arguments, schemaObject) {
+	decision := policy.Evaluate(p.Config, policy.Request{Name: params.Name, Arguments: params.Arguments})
+	if err := p.writeAudit(audit.Entry{Event: "tool_call", Method: msg.Method, Tool: params.Name, Decision: string(decision.Decision), Reason: decision.ReasonCode, Fingerprint: audit.Fingerprint(params.ArgumentsValue)}); err != nil {
+		return fmt.Errorf("write audit entry: %w", err)
+	}
+	if decision.Decision == policy.Allow {
+		if schema, ok := schemas[params.Name]; ok {
+			var schemaObject map[string]json.RawMessage
+			if json.Unmarshal(schema, &schemaObject) != nil || !argumentsMatchSchema(params.Arguments, schemaObject) {
+				if kind == protocol.Notification {
+					return nil
+				}
+				response, responseErr := protocol.ErrorResponse(msg.ID, -32602, "invalid params", "schema_validation_failed")
+				if responseErr != nil {
+					return responseErr
+				}
+				return p.writeBounded(out, response)
+			}
+		} else if _, explicit := p.Config.Tools[params.Name]; explicit && p.Config.Tools[params.Name].Decision == "allow" {
 			if kind == protocol.Notification {
 				return nil
 			}
-			response, responseErr := protocol.ErrorResponse(msg.ID, -32602, "invalid params", "schema_validation_failed")
+			response, responseErr := protocol.ErrorResponse(msg.ID, -32001, "tool schema is unavailable", "schema_unavailable")
 			if responseErr != nil {
 				return responseErr
 			}
 			return p.writeBounded(out, response)
 		}
-	}
-	decision := policy.Evaluate(p.Config, policy.Request{Name: params.Name, Arguments: params.Arguments})
-	if err := p.writeAudit(audit.Entry{Event: "tool_call", Method: msg.Method, Tool: params.Name, Decision: string(decision.Decision), Reason: decision.ReasonCode}); err != nil {
-		return fmt.Errorf("write audit entry: %w", err)
 	}
 	if decision.Decision != policy.Allow || p.Config.Mode == "dry-run" {
 		if kind == protocol.Notification {
@@ -65,8 +76,9 @@ func (p Proxy) call(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 }
 
 type callParams struct {
-	Name      string
-	Arguments json.RawMessage
+	Name           string
+	Arguments      json.RawMessage
+	ArgumentsValue interface{}
 }
 
 func validCallParams(raw json.RawMessage) (callParams, error) {
@@ -86,5 +98,5 @@ func validCallParams(raw json.RawMessage) (callParams, error) {
 	if json.Unmarshal(arguments, &args) != nil || args == nil {
 		return callParams{}, fmt.Errorf("arguments must be object")
 	}
-	return callParams{Name: name, Arguments: arguments}, nil
+	return callParams{Name: name, Arguments: arguments, ArgumentsValue: args}, nil
 }
