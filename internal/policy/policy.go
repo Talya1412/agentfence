@@ -42,10 +42,8 @@ func Evaluate(cfg config.Config, req Request) Result {
 	if len(req.Arguments) > cfg.Budgets.MaxInputBytes {
 		return Result{Deny, "input_budget_exceeded", "tool arguments exceed configured byte budget"}
 	}
-	if explicit {
-		if reason := checkArguments(tool, cfg, req.Arguments); reason != "" {
-			return Result{Deny, reason, explanation(reason)}
-		}
+	if reason := checkArguments(tool, cfg, req.Arguments); reason != "" {
+		return Result{Deny, reason, explanation(reason)}
 	}
 	return Result{Allow, "allowed", "tool call matches policy"}
 }
@@ -111,10 +109,12 @@ func containsSQL(text string) bool {
 }
 
 func pathsAllowed(value interface{}, allowed []string) bool {
-	for _, candidate := range stringsFrom(value) {
-		if !looksLikePath(candidate) {
-			continue
+	for _, root := range allowed {
+		if !filepath.IsAbs(root) {
+			return false
 		}
+	}
+	for _, candidate := range stringsFrom(value) {
 		path := filepath.Clean(candidate)
 		matched := false
 		for _, root := range allowed {
@@ -151,13 +151,9 @@ func stringsFrom(value interface{}) []string {
 	return out
 }
 
-func looksLikePath(value string) bool {
-	return strings.Contains(value, "/") || strings.Contains(value, "\\") || filepath.IsAbs(value)
-}
-
 func urlsAllowed(value interface{}, tool config.Tool, network config.Network) bool {
-	schemes := append(append([]string{}, tool.Schemes...), network.AllowedSchemes...)
-	hosts := append(append([]string{}, tool.Hosts...), network.AllowedHosts...)
+	schemes := restrictiveAllowlist(tool.Schemes, network.AllowedSchemes)
+	hosts := restrictiveAllowlist(tool.Hosts, network.AllowedHosts)
 	for _, candidate := range stringsFrom(value) {
 		if !looksLikeURL(candidate) {
 			continue
@@ -168,6 +164,22 @@ func urlsAllowed(value interface{}, tool config.Tool, network config.Network) bo
 		}
 	}
 	return true
+}
+
+func restrictiveAllowlist(tool, global []string) []string {
+	if len(global) == 0 {
+		return tool
+	}
+	if len(tool) == 0 {
+		return global
+	}
+	intersection := make([]string, 0, len(tool))
+	for _, candidate := range tool {
+		if contains(global, candidate) {
+			intersection = append(intersection, candidate)
+		}
+	}
+	return intersection
 }
 
 func looksLikeURL(value string) bool {
