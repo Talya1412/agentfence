@@ -18,7 +18,7 @@ func TestRunProxy_forwardsServerArgumentsAndClosesLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverPath := t.TempDir() + "/server.sh"
-	serverScript := "#!/bin/sh\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[{\"name\":\"echo\",\"inputSchema\":{\"type\":\"object\"}}]}}'\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"arg\":\"'$1'\"}}'\n"
+	serverScript := "#!/bin/sh\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[{\"name\":\"echo\",\"inputSchema\":{\"type\":\"object\"}}]}}'\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"arg\":\"'$1'\"}}'\ncat >/dev/null\n"
 	if err := os.WriteFile(serverPath, []byte(serverScript), 0700); err != nil {
 		t.Fatal(err)
 	}
