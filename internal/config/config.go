@@ -1,0 +1,88 @@
+package config
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+type Config struct {
+	Version   int             `json:"version"`
+	Mode      string          `json:"mode"`
+	Defaults  Defaults        `json:"defaults"`
+	Tools     map[string]Tool `json:"tools"`
+	Network   Network         `json:"network"`
+	Budgets   Budgets         `json:"budgets"`
+	Redaction Redaction       `json:"redaction"`
+}
+
+type Defaults struct {
+	Decision string `json:"decision"`
+}
+type Tool struct {
+	Decision       string   `json:"decision"`
+	Paths          []string `json:"paths"`
+	Hosts          []string `json:"hosts"`
+	Schemes        []string `json:"schemes"`
+	Shell          bool     `json:"shell"`
+	DestructiveSQL bool     `json:"destructive_sql"`
+}
+type Network struct {
+	AllowedSchemes []string `json:"allowed_schemes"`
+	AllowedHosts   []string `json:"allowed_hosts"`
+}
+type Budgets struct {
+	MaxInputBytes  int `json:"max_input_bytes"`
+	MaxResultBytes int `json:"max_result_bytes"`
+	MaxLines       int `json:"max_lines"`
+	MaxFrameBytes  int `json:"max_frame_bytes"`
+	TimeoutSeconds int `json:"timeout_seconds"`
+}
+type Redaction struct {
+	Keys     []string `json:"keys"`
+	Patterns []string `json:"patterns"`
+}
+
+func Default() Config {
+	return Config{Version: 1, Mode: "enforce", Defaults: Defaults{Decision: "deny"}, Tools: map[string]Tool{}, Budgets: Budgets{MaxInputBytes: 64 * 1024, MaxResultBytes: 256 * 1024, MaxLines: 1000, MaxFrameBytes: 1024 * 1024, TimeoutSeconds: 30}, Redaction: Redaction{Keys: []string{"password", "token", "secret", "api_key", "authorization"}}}
+}
+
+func Load(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("read config: %w", err)
+	}
+	cfg := Default()
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (c Config) Validate() error {
+	if c.Version != 1 {
+		return fmt.Errorf("config version must be 1")
+	}
+	if c.Mode != "enforce" && c.Mode != "dry-run" {
+		return fmt.Errorf("mode must be enforce or dry-run")
+	}
+	if !validDecision(c.Defaults.Decision) {
+		return fmt.Errorf("invalid default decision")
+	}
+	if c.Budgets.MaxInputBytes <= 0 || c.Budgets.MaxResultBytes <= 0 || c.Budgets.MaxLines <= 0 || c.Budgets.MaxFrameBytes <= 0 || c.Budgets.TimeoutSeconds <= 0 {
+		return fmt.Errorf("budgets must be positive")
+	}
+	for name, tool := range c.Tools {
+		if name == "" || !validDecision(tool.Decision) {
+			return fmt.Errorf("invalid tool policy for %q", name)
+		}
+	}
+	return nil
+}
+
+func validDecision(value string) bool {
+	return value == "allow" || value == "deny" || value == "require_approval"
+}
