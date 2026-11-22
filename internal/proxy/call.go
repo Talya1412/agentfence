@@ -92,7 +92,7 @@ func validCallParams(raw json.RawMessage) (callParams, error) {
 	}
 	arguments := object["arguments"]
 	if len(arguments) == 0 {
-		return callParams{}, fmt.Errorf("arguments must be object")
+		arguments = json.RawMessage(`{}`)
 	}
 	var args map[string]interface{}
 	if json.Unmarshal(arguments, &args) != nil || args == nil {

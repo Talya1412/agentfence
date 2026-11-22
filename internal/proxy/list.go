@@ -25,6 +25,9 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 	if err != nil {
 		return err
 	}
+	if len(response.Error) > 0 {
+		return p.writeRedactedListResponse(out, response)
+	}
 	listBytes := len(response.Result)
 	if listBytes > p.listByteLimit() {
 		return fmt.Errorf("tools/list aggregate exceeds byte budget")
@@ -67,6 +70,10 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 		pageResponse, readErr := p.readResponseRaw(pageRequest.ID, out, serverIn)
 		if readErr != nil {
 			return readErr
+		}
+		if len(pageResponse.Error) > 0 {
+			pageResponse.ID = msg.ID
+			return p.writeRedactedListResponse(out, pageResponse)
 		}
 		listBytes += len(pageResponse.Result)
 		if listBytes > p.listByteLimit() {
@@ -123,6 +130,10 @@ func (p Proxy) list(msg protocol.Message, kind protocol.Kind, out io.Writer, ser
 	if err != nil {
 		return err
 	}
+	return p.writeRedactedListResponse(out, response)
+}
+
+func (p Proxy) writeRedactedListResponse(out io.Writer, response protocol.Message) error {
 	redacted, err := p.redactMessage(response)
 	if err != nil {
 		return err
